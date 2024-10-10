@@ -77,6 +77,8 @@ class LlmModel(str, Enum, metaclass=LlmModelMeta):
     # Ollama models
     OLLAMA_LLAMA3_8B = "llama3"
     OLLAMA_LLAMA3_405B = "llama3.1:405b"
+    # CUSTOM
+    OLLAMA_DOLPHIN = "dolphin-mistral:latest"
 
     @property
     def metadata(self) -> ModelMetadata:
@@ -115,6 +117,8 @@ MODEL_METADATA = {
     LlmModel.LLAMA3_1_8B: ModelMetadata("groq", 131072, cost_factor=13),
     LlmModel.OLLAMA_LLAMA3_8B: ModelMetadata("ollama", 8192, cost_factor=7),
     LlmModel.OLLAMA_LLAMA3_405B: ModelMetadata("ollama", 8192, cost_factor=11),
+    # CUSTOM
+    LlmModel.OLLAMA_DOLPHIN: ModelMetadata("ollama", 32768, cost_factor=0),
 }
 
 for model in LlmModel:
@@ -140,6 +144,11 @@ class AIStructuredResponseGeneratorBlock(Block):
         retry: int = 3
         prompt_values: dict[str, str] = SchemaField(
             advanced=False, default={}, description="Values used to fill in the prompt."
+        )
+        ollama_host: str = SchemaField(
+            advanced=True,
+            default="localhost:11434",
+            description="Ollama host for local  models",
         )
 
     class Output(BlockSchema):
@@ -175,7 +184,11 @@ class AIStructuredResponseGeneratorBlock(Block):
 
     @staticmethod
     def llm_call(
-        api_key: str, model: LlmModel, prompt: list[dict], json_format: bool
+        api_key: str,
+        model: LlmModel,
+        prompt: list[dict],
+        json_format: bool,
+        ollama_host: str,
     ) -> str:
         provider = model.metadata.provider
 
@@ -237,9 +250,10 @@ class AIStructuredResponseGeneratorBlock(Block):
             )
             return response.choices[0].message.content or ""
         elif provider == "ollama":
-            response = ollama.generate(
+            client = ollama.Client(host=ollama_host)
+            response = client.generate(
                 model=model.value,
-                prompt=prompt[0]["content"],
+                prompt=str(prompt),
             )
             return response["response"]
         else:
@@ -305,6 +319,7 @@ class AIStructuredResponseGeneratorBlock(Block):
                     model=model,
                     prompt=prompt,
                     json_format=bool(input_data.expected_format),
+                    ollama_host=input_data.ollama_host,
                 )
                 logger.info(f"LLM attempt-{retry_count} response: {response_text}")
 
@@ -361,6 +376,11 @@ class AITextGeneratorBlock(Block):
         retry: int = 3
         prompt_values: dict[str, str] = SchemaField(
             advanced=False, default={}, description="Values used to fill in the prompt."
+        )
+        ollama_host: str = SchemaField(
+            advanced=True,
+            default="localhost:11434",
+            description="Ollama host for local  models",
         )
 
     class Output(BlockSchema):
@@ -421,6 +441,11 @@ class AITextSummarizerBlock(Block):
         # TODO: Make this dynamic
         max_tokens: int = 4000  # Adjust based on the model's context window
         chunk_overlap: int = 100  # Overlap between chunks to maintain context
+        ollama_host: str = SchemaField(
+            advanced=True,
+            default="localhost:11434",
+            description="Ollama host for local  models",
+        )
 
     class Output(BlockSchema):
         summary: str
@@ -562,6 +587,11 @@ class AIConversationBlock(Block):
             description="The maximum number of tokens to generate in the chat completion.",
             ge=1,
         )
+        ollama_host: str = SchemaField(
+            advanced=True,
+            default="localhost:11434",
+            description="Ollama host for local  models",
+        )
 
     class Output(BlockSchema):
         response: str = SchemaField(
@@ -603,6 +633,7 @@ class AIConversationBlock(Block):
         api_key: str,
         model: LlmModel,
         messages: List[dict[str, str]],
+        ollama_host: str,
         max_tokens: int | None = None,
     ) -> str:
         provider = model.metadata.provider
@@ -632,7 +663,8 @@ class AIConversationBlock(Block):
             )
             return response.choices[0].message.content or ""
         elif provider == "ollama":
-            response = ollama.chat(
+            client = ollama.Client(host=ollama_host)
+            response = client.chat(
                 model=model.value,
                 messages=messages,  # type: ignore
                 stream=False,  # type: ignore
@@ -655,6 +687,7 @@ class AIConversationBlock(Block):
                 model=input_data.model,
                 messages=messages,
                 max_tokens=input_data.max_tokens,
+                ollama_host=input_data.ollama_host,
             )
 
             yield "response", response
