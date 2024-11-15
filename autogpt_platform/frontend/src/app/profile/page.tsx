@@ -20,6 +20,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { APIKeysSection } from "@/components/profile/api-keys-section";
 import { CredentialsProviderName } from "@/lib/autogpt-server-api";
 
 export default function PrivatePage() {
@@ -111,6 +112,8 @@ export default function PrivatePage() {
           Log out
         </Button>
       </div>
+      <Separator className="my-6" />
+      <APIKeysSection />
       <Separator className="my-6" />
       <h2 className="mb-4 text-lg">Connections & Credentials</h2>
       <Table>

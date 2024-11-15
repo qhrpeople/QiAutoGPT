@@ -16,6 +16,9 @@ import {
   NodeExecutionResult,
   OAuth2Credentials,
   User,
+  APIKeyPermission,
+  CreateAPIKeyResponse,
+  APIKey,
   ScheduleCreatable,
   ScheduleUpdateable,
 } from "./types";
@@ -240,6 +243,35 @@ export default class BaseAutoGPTServerAPI {
     return this._request("GET", path, query);
   }
 
+  // API Key related requests
+  async createAPIKey(
+    name: string,
+    permissions: APIKeyPermission[],
+    description?: string,
+  ): Promise<CreateAPIKeyResponse> {
+    return this._request("POST", "/api-keys", {
+      name,
+      permissions,
+      description,
+    });
+  }
+
+  async listAPIKeys(): Promise<APIKey[]> {
+    return this._get("/api-keys");
+  }
+
+  async revokeAPIKey(keyId: string): Promise<APIKey> {
+    return this._request("DELETE", `/api-keys/${keyId}`);
+  }
+
+  async updateAPIKeyPermissions(
+    keyId: string,
+    permissions: APIKeyPermission[],
+  ): Promise<APIKey> {
+    return this._request("PUT", `/api-keys/${keyId}/permissions`, {
+      permissions,
+    });
+
   // Scheduling request
   async createSchedule(
     graphId: string,
@@ -263,6 +295,7 @@ export default class BaseAutoGPTServerAPI {
 
   async getSchedules(graphId: string): Promise<{ [key: string]: string }> {
     return this._get(`/graphs/${graphId}/schedules`);
+
   }
 
   private async _request(
