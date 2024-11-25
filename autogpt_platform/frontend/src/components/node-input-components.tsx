@@ -9,6 +9,7 @@ import {
   BlockIOStringSubSchema,
   BlockIONumberSubSchema,
   BlockIOBooleanSubSchema,
+  BlockIOSimpleTypeSubSchema,
 } from "@/lib/autogpt-server-api/types";
 import React, { FC, useCallback, useEffect, useState } from "react";
 import { Button } from "./ui/button";
@@ -24,6 +25,7 @@ import { LocalValuedInput } from "./ui/input";
 import NodeHandle from "./NodeHandle";
 import { ConnectionData } from "./CustomNode";
 import { CredentialsInput } from "./integrations/credentials-input";
+import { MultiSelect } from "./ui/multiselect-input";
 
 type NodeObjectInputTreeProps = {
   nodeId: string;
@@ -482,6 +484,13 @@ const NodeKeyValueInput: FC<{
   );
 };
 
+// Checking if schema is type of string
+function isStringSubSchema(
+  schema: BlockIOSimpleTypeSubSchema,
+): schema is BlockIOStringSubSchema {
+  return "type" in schema && schema.type === "string";
+}
+
 const NodeArrayInput: FC<{
   nodeId: string;
   selfKey: string;
@@ -507,6 +516,26 @@ const NodeArrayInput: FC<{
 }) => {
   entries ??= schema.default;
   if (!entries || !Array.isArray(entries)) entries = [];
+
+  const isMultiSelectEnum =
+    schema.items &&
+    isStringSubSchema(schema.items) &&
+    schema.items.enum &&
+    schema.isMultiSelect;
+
+  if (isMultiSelectEnum) {
+    return (
+      <NodeMultiSelectInput
+        selfKey={selfKey}
+        schema={schema.items! as BlockIOStringSubSchema}
+        value={entries}
+        error={errors[selfKey]}
+        handleInputChange={handleInputChange}
+        className={className}
+        displayName={displayName || beautifyString(selfKey)}
+      />
+    );
+  }
 
   const prefix = `${selfKey}_$_`;
   connections
@@ -590,6 +619,59 @@ const NodeArrayInput: FC<{
       >
         <PlusIcon className="mr-2" /> Add Item
       </Button>
+      {error && <span className="error-message">{error}</span>}
+    </div>
+  );
+};
+
+const NodeMultiSelectInput: FC<{
+  selfKey: string;
+  schema: BlockIOStringSubSchema;
+  value?: string[];
+  error?: string;
+  handleInputChange: NodeObjectInputTreeProps["handleInputChange"];
+  className?: string;
+  displayName: string;
+}> = ({
+  selfKey,
+  schema,
+  value = [],
+  error,
+  handleInputChange,
+  className,
+  displayName,
+}) => {
+  return (
+    <div className={className}>
+      {schema.enum ? (
+        <MultiSelect
+          options={schema.enum}
+          onValueChange={(newValue) => handleInputChange(selfKey, newValue)}
+          defaultValue={value}
+          placeholder={schema.placeholder || displayName}
+          variant="inverted"
+          className="mr-0 w-[300px]"
+          maxCount={2}
+        />
+      ) : (
+        <div className="nodrag relative">
+          <LocalValuedInput
+            type="text"
+            id={selfKey}
+            value={value.join(", ")}
+            onChange={(e) =>
+              handleInputChange(
+                selfKey,
+                e.target.value.split(",").map((s) => s.trim()),
+              )
+            }
+            placeholder={
+              schema?.placeholder || `Enter ${beautifyString(displayName)}`
+            }
+            className="pr-8"
+          />
+        </div>
+      )}
       {error && <span className="error-message">{error}</span>}
     </div>
   );
