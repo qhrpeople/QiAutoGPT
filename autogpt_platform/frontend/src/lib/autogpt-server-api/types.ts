@@ -41,7 +41,7 @@ export type BlockIOSubSchema =
   | BlockIOSimpleTypeSubSchema
   | BlockIOCombinedTypeSubSchema;
 
-type BlockIOSimpleTypeSubSchema =
+export type BlockIOSimpleTypeSubSchema =
   | BlockIOObjectSubSchema
   | BlockIOCredentialsSubSchema
   | BlockIOKVSubSchema
@@ -74,6 +74,7 @@ export type BlockIOKVSubSchema = BlockIOSubSchemaMeta & {
 export type BlockIOArraySubSchema = BlockIOSubSchemaMeta & {
   type: "array";
   items?: BlockIOSimpleTypeSubSchema;
+  isMultiSelect?: boolean;
   default?: Array<string>;
 };
 
@@ -117,6 +118,7 @@ export const PROVIDER_NAMES = {
   REPLICATE: "replicate",
   REVID: "revid",
   UNREAL_SPEECH: "unreal_speech",
+  TWITTER: "twitter",
 } as const;
 // --8<-- [end:BlockIOCredentialsSubSchema]
 
