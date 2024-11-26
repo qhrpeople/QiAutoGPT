@@ -127,6 +127,7 @@ class Graph(BaseDbModel):
             "properties": {
                 p.name: {
                     "secret": p.secret,
+                    "isMultiSelect": False,
                     "advanced": p.advanced,
                     "title": p.title or p.name,
                     **({"description": p.description} if p.description else {}),
