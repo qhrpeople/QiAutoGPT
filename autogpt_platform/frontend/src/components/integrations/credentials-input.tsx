@@ -71,8 +71,8 @@ export const providerIcons: Record<
   pinecone: fallbackIcon,
   replicate: fallbackIcon,
   revid: fallbackIcon,
-  unreal_speech: fallbackIcon,
   twitter: FaTwitter,
+  unreal_speech: fallbackIcon,
 };
 // --8<-- [end:ProviderIconsEmbed]
 
