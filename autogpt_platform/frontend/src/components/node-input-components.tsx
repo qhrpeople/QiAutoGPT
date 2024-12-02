@@ -32,6 +32,7 @@ import { LocalValuedInput } from "./ui/input";
 import NodeHandle from "./NodeHandle";
 import { ConnectionData } from "./CustomNode";
 import { CredentialsInput } from "./integrations/credentials-input";
+import { useNodes } from "@xyflow/react";
 
 type NodeObjectInputTreeProps = {
   nodeId: string;
@@ -116,6 +117,42 @@ export const NodeGenericInputField: FC<{
   className,
   displayName,
 }) => {
+  const nodes = useNodes();
+
+  const isDisabledByMutualExclusion = useCallback(() => {
+    if (!propSchema.mutually_exclusive) return false;
+
+    // Find all inputs in the same node with the same mutuallyExclusive group
+    const node = nodes.find((n) => n.id === nodeId);
+    if (!node) return false;
+    const inputSchema = node.data.inputSchema as {
+      properties?: Record<string, BlockIOSubSchema>;
+    };
+    if (!inputSchema?.properties) return false;
+
+    // Check if any other input in the same group has a value
+    return Object.entries(inputSchema.properties).some(([key, schema]) => {
+      const otherSchema = schema;
+      return (
+        key !== propKey &&
+        otherSchema.mutually_exclusive === propSchema.mutually_exclusive &&
+        (node.data.hardcodedValues as Record<string, unknown>)[key] !==
+          undefined &&
+        (node.data.hardcodedValues as Record<string, unknown>)[key] !== ""
+      );
+    });
+  }, [nodeId, propKey, propSchema, nodes]);
+
+  const isDisabled = isDisabledByMutualExclusion();
+
+  const handleMutualExclusiveInputChange = (key: string, value: any) => {
+    if (isDisabled) {
+      console.warn("Input is disabled due to mutual exclusivity");
+      return;
+    }
+    handleInputChange(key, value);
+  };
+
   className = cn(className, "my-2");
   displayName ||= propSchema.title || beautifyString(propKey);
 
@@ -219,7 +256,8 @@ export const NodeGenericInputField: FC<{
           error={errors[propKey]}
           className={className}
           displayName={displayName}
-          handleInputChange={handleInputChange}
+          disabled={isDisabled}
+          handleInputChange={handleMutualExclusiveInputChange}
           handleInputClick={handleInputClick}
         />
       );
@@ -244,7 +282,8 @@ export const NodeGenericInputField: FC<{
         error={errors[propKey]}
         className={className}
         displayName={displayName}
-        handleInputChange={handleInputChange}
+        disabled={isDisabled}
+        handleInputChange={handleMutualExclusiveInputChange}
         handleInputClick={handleInputClick}
       />
     );
@@ -443,7 +482,7 @@ const NodeKeyValueInput: FC<{
     >
       <div>
         {keyValuePairs.map(({ key, value }, index) => (
-          /* 
+          /*
           The `index` is used as a DOM key instead of the actual `key`
           because the `key` can change with each input, causing the input to lose focus.
           */
@@ -693,6 +732,7 @@ const NodeStringInput: FC<{
   handleInputClick: NodeObjectInputTreeProps["handleInputClick"];
   className?: string;
   displayName: string;
+  disabled?: boolean;
 }> = ({
   selfKey,
   schema,
@@ -702,6 +742,7 @@ const NodeStringInput: FC<{
   handleInputClick,
   className,
   displayName,
+  disabled,
 }) => {
   if (!value) {
     value = schema.default || "";
@@ -718,8 +759,11 @@ const NodeStringInput: FC<{
         <Select
           defaultValue={value}
           onValueChange={(newValue) => handleInputChange(selfKey, newValue)}
+          disabled={disabled}
         >
-          <SelectTrigger>
+          <SelectTrigger
+            className={disabled ? "cursor-not-allowed opacity-50" : ""}
+          >
             <SelectValue placeholder={schema.placeholder || displayName} />
           </SelectTrigger>
           <SelectContent className="nodrag">
@@ -733,7 +777,11 @@ const NodeStringInput: FC<{
       ) : (
         <div
           className="nodrag relative"
-          onClick={schema.secret ? () => handleInputClick(selfKey) : undefined}
+          onClick={
+            schema.secret && !disabled
+              ? () => handleInputClick(selfKey)
+              : undefined
+          }
         >
           <LocalValuedInput
             type="text"
@@ -741,20 +789,26 @@ const NodeStringInput: FC<{
             value={schema.secret && value ? "*".repeat(value.length) : value}
             onChange={(e) => handleInputChange(selfKey, e.target.value)}
             readOnly={schema.secret}
+            disabled={disabled}
             placeholder={
               schema?.placeholder || `Enter ${beautifyString(displayName)}`
             }
-            className="pr-8 read-only:cursor-pointer read-only:text-gray-500"
+            className={cn(
+              "pr-8 read-only:cursor-pointer read-only:text-gray-500",
+              disabled && "cursor-not-allowed opacity-50",
+            )}
           />
-          <Button
-            variant="ghost"
-            size="icon"
-            className="absolute inset-1 left-auto h-7 w-7 rounded-[0.25rem]"
-            onClick={() => handleInputClick(selfKey)}
-            title="Open a larger textbox input"
-          >
-            <Pencil2Icon className="m-0 p-0" />
-          </Button>
+          {!disabled && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute inset-1 left-auto h-7 w-7 rounded-[0.25rem]"
+              onClick={() => handleInputClick(selfKey)}
+              title="Open a larger textbox input"
+            >
+              <Pencil2Icon className="m-0 p-0" />
+            </Button>
+          )}
         </div>
       )}
       {error && <span className="error-message">{error}</span>}
@@ -888,6 +942,7 @@ const NodeFallbackInput: FC<{
   handleInputClick: NodeObjectInputTreeProps["handleInputClick"];
   className?: string;
   displayName: string;
+  disabled?: boolean;
 }> = ({
   selfKey,
   schema,
@@ -897,6 +952,7 @@ const NodeFallbackInput: FC<{
   handleInputClick,
   className,
   displayName,
+  disabled,
 }) => {
   value ||= (schema as BlockIOStringSubSchema)?.default;
   return (
@@ -906,6 +962,7 @@ const NodeFallbackInput: FC<{
       value={value}
       error={error}
       handleInputChange={handleInputChange}
+      disabled={disabled}
       handleInputClick={handleInputClick}
       className={className}
       displayName={displayName}
