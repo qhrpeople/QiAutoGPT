@@ -15,10 +15,21 @@ import {
   GraphMetaWithRuns,
   GraphUpdateable,
   NodeExecutionResult,
+  MyAgentsResponse,
   OAuth2Credentials,
-  Schedule,
-  ScheduleCreatable,
+  ProfileDetails,
   User,
+  StoreAgentsResponse,
+  StoreAgentDetails,
+  CreatorsResponse,
+  CreatorDetails,
+  StoreSubmissionsResponse,
+  StoreSubmissionRequest,
+  StoreSubmission,
+  StoreReviewCreate,
+  StoreReview,
+  ScheduleCreatable,
+  Schedule,
 } from "./types";
 
 export default class BaseAutoGPTServerAPI {
@@ -35,7 +46,7 @@ export default class BaseAutoGPTServerAPI {
 
   constructor(
     baseUrl: string = process.env.NEXT_PUBLIC_AGPT_SERVER_URL ||
-      "http://localhost:8006/api/v1",
+      "http://localhost:8006/api/",
     wsUrl: string = process.env.NEXT_PUBLIC_AGPT_WS_SERVER_URL ||
       "ws://localhost:8001/ws",
     supabaseClient: SupabaseClient | null = null,
@@ -57,8 +68,12 @@ export default class BaseAutoGPTServerAPI {
     return this._request("POST", "/auth/user", {});
   }
 
-  getUserCredit(): Promise<{ credits: number }> {
-    return this._get(`/credits`);
+  getUserCredit(page?: string): Promise<{ credits: number }> {
+    try {
+      return this._get(`/credits`, undefined, page);
+    } catch (error) {
+      return Promise.resolve({ credits: 0 });
+    }
   }
 
   getBlocks(): Promise<Block[]> {
@@ -258,8 +273,107 @@ export default class BaseAutoGPTServerAPI {
     return this._request("POST", "/analytics/log_raw_analytics", analytic);
   }
 
-  private async _get(path: string, query?: Record<string, any>) {
-    return this._request("GET", path, query);
+  ///////////////////////////////////////////
+  /////////// V2 STORE API /////////////////
+  /////////////////////////////////////////
+
+  getStoreProfile(page?: string): Promise<ProfileDetails | null> {
+    try {
+      console.log("+++ Making API from: ", page);
+      const result = this._get("/store/profile", undefined, page);
+      return result;
+    } catch (error) {
+      console.error("Error fetching store profile:", error);
+      return Promise.resolve(null);
+    }
+  }
+
+  getStoreAgents(params?: {
+    featured?: boolean;
+    creator?: string;
+    sorted_by?: string;
+    search_query?: string;
+    category?: string;
+    page?: number;
+    page_size?: number;
+  }): Promise<StoreAgentsResponse> {
+    return this._get("/store/agents", params);
+  }
+
+  getStoreAgent(
+    username: string,
+    agentName: string,
+  ): Promise<StoreAgentDetails> {
+    return this._get(`/store/agents/${username}/${agentName}`);
+  }
+
+  getStoreCreators(params?: {
+    featured?: boolean;
+    search_query?: string;
+    sorted_by?: string;
+    page?: number;
+    page_size?: number;
+  }): Promise<CreatorsResponse> {
+    return this._get("/store/creators", params);
+  }
+
+  getStoreCreator(username: string): Promise<CreatorDetails> {
+    return this._get(`/store/creator/${username}`);
+  }
+
+  getStoreSubmissions(params?: {
+    page?: number;
+    page_size?: number;
+  }): Promise<StoreSubmissionsResponse> {
+    return this._get("/store/submissions", params);
+  }
+
+  createStoreSubmission(
+    submission: StoreSubmissionRequest,
+  ): Promise<StoreSubmission> {
+    return this._request("POST", "/store/submissions", submission);
+  }
+
+  deleteStoreSubmission(submission_id: string): Promise<boolean> {
+    return this._request("DELETE", `/store/submissions/${submission_id}`);
+  }
+
+  uploadStoreSubmissionMedia(file: File): Promise<string> {
+    const formData = new FormData();
+    formData.append("file", file);
+    return this._uploadFile("/store/submissions/media", file);
+  }
+
+  updateStoreProfile(profile: ProfileDetails): Promise<ProfileDetails> {
+    return this._request("POST", "/store/profile", profile);
+  }
+
+  reviewAgent(
+    username: string,
+    agentName: string,
+    review: StoreReviewCreate,
+  ): Promise<StoreReview> {
+    console.log("Reviewing agent: ", username, agentName, review);
+    return this._request(
+      "POST",
+      `/store/agents/${username}/${agentName}/review`,
+      review,
+    );
+  }
+
+  getMyAgents(params?: {
+    page?: number;
+    page_size?: number;
+  }): Promise<MyAgentsResponse> {
+    return this._get("/store/myagents", params);
+  }
+
+  ///////////////////////////////////////////
+  /////////// INTERNAL FUNCTIONS ////////////
+  //////////////////////////////??///////////
+
+  private async _get(path: string, query?: Record<string, any>, page?: string) {
+    return this._request("GET", path, query, page);
   }
 
   async createSchedule(schedule: ScheduleCreatable): Promise<Schedule> {
@@ -274,18 +388,93 @@ export default class BaseAutoGPTServerAPI {
     return this._get(`/schedules`);
   }
 
+  private async _uploadFile(path: string, file: File): Promise<string> {
+    // Get session with retry logic
+    let token = "no-token-found";
+    let retryCount = 0;
+    const maxRetries = 3;
+
+    while (retryCount < maxRetries) {
+      const {
+        data: { session },
+      } = (await this.supabaseClient?.auth.getSession()) || {
+        data: { session: null },
+      };
+
+      if (session?.access_token) {
+        token = session.access_token;
+        break;
+      }
+
+      retryCount++;
+      if (retryCount < maxRetries) {
+        await new Promise((resolve) => setTimeout(resolve, 100 * retryCount));
+      }
+    }
+
+    // Create a FormData object and append the file
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const response = await fetch(this.baseUrl + path, {
+      method: "POST",
+      headers: {
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Error uploading file: ${response.statusText}`);
+    }
+
+    // Parse the response appropriately
+    const media_url = await response.text();
+    return media_url;
+  }
+
   private async _request(
     method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
     path: string,
     payload?: Record<string, any>,
+    page?: string,
   ) {
     if (method !== "GET") {
       console.debug(`${method} ${path} payload:`, payload);
     }
 
-    const token =
-      (await this.supabaseClient?.auth.getSession())?.data.session
-        ?.access_token || "";
+    // Get session with retry logic
+    let token = "no-token-found";
+    let retryCount = 0;
+    const maxRetries = 3;
+
+    while (retryCount < maxRetries) {
+      const {
+        data: { session },
+      } = (await this.supabaseClient?.auth.getSession()) || {
+        data: { session: null },
+      };
+
+      if (session?.access_token) {
+        token = session.access_token;
+        break;
+      }
+
+      retryCount++;
+      if (retryCount < maxRetries) {
+        await new Promise((resolve) => setTimeout(resolve, 100 * retryCount));
+      }
+    }
+    console.log("Request: ", method, path, "from: ", page);
+    if (token === "no-token-found") {
+      console.warn(
+        "No auth token found after retries. This may indicate a session sync issue between client and server.",
+      );
+      console.debug("Last session attempt:", retryCount);
+    } else {
+      console.log("Auth token found");
+    }
+    console.log("--------------------------------");
 
     let url = this.baseUrl + path;
     const payloadAsQuery = ["GET", "DELETE"].includes(method);
@@ -308,13 +497,14 @@ export default class BaseAutoGPTServerAPI {
     if (!response.ok) {
       console.warn(`${method} ${path} returned non-OK response:`, response);
 
-      if (
-        response.status === 403 &&
-        typeof window !== "undefined" // Check if in browser environment
-      ) {
-        window.location.href = "/login";
-        return null;
-      }
+      // console.warn("baseClient is attempting to redirect by changing window location")
+      // if (
+      //   response.status === 403 &&
+      //   response.statusText === "Not authenticated" &&
+      //   typeof window !== "undefined" // Check if in browser environment
+      // ) {
+      //   window.location.href = "/login";
+      // }
 
       let errorDetail;
       try {
