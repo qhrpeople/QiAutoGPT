@@ -4,11 +4,11 @@ from abc import ABC, abstractmethod
 from typing import ClassVar, Generic, TypeVar
 from uuid import uuid4
 
-from autogpt_libs.supabase_integration_credentials_store import Credentials
 from fastapi import Request
 from strenum import StrEnum
 
 from backend.data import integrations
+from backend.data.model import Credentials
 from backend.util.exceptions import MissingConfigError
 from backend.util.settings import Config
 
@@ -81,7 +81,9 @@ class BaseWebhooksManager(ABC, Generic[WT]):
     # --8<-- [end:BaseWebhooksManager3]
 
     # --8<-- [start:BaseWebhooksManager5]
-    async def trigger_ping(self, webhook: integrations.Webhook) -> None:
+    async def trigger_ping(
+        self, webhook: integrations.Webhook, credentials: Credentials | None
+    ) -> None:
         """
         Triggers a ping to the given webhook.
 

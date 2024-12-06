@@ -71,16 +71,13 @@ export const FlowRunInfo: React.FC<
         result: result.output_data?.output || undefined,
       })),
     );
-  }, [api, flow.id, flow.version, flowRun.id]);
+  }, [api, flow.id, flowRun.id]);
 
   // Fetch graph and execution data
   useEffect(() => {
-    if (!isOutputOpen || blockOutputs.length > 0) {
-      return;
-    }
-
+    if (!isOutputOpen) return;
     fetchBlockResults();
-  }, [isOutputOpen, blockOutputs]);
+  }, [isOutputOpen, fetchBlockResults]);
 
   if (flowRun.graphID != flow.id) {
     throw new Error(
@@ -90,7 +87,7 @@ export const FlowRunInfo: React.FC<
 
   const handleStopRun = useCallback(() => {
     api.stopGraphExecution(flow.id, flowRun.id);
-  }, [flow.id, flowRun.id]);
+  }, [api, flow.id, flowRun.id]);
 
   return (
     <>

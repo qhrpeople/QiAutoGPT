@@ -1,12 +1,6 @@
 import logging
 from typing import Annotated, Literal
 
-from autogpt_libs.supabase_integration_credentials_store.types import (
-    APIKeyCredentials,
-    Credentials,
-    CredentialsType,
-    OAuth2Credentials,
-)
 from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, Request
 from pydantic import BaseModel, Field, SecretStr
 
@@ -15,8 +9,14 @@ from backend.data.integrations import (
     WebhookEvent,
     get_all_webhooks,
     get_webhook,
-    listen_for_webhook_event,
     publish_webhook_event,
+    wait_for_webhook_event,
+)
+from backend.data.model import (
+    APIKeyCredentials,
+    Credentials,
+    CredentialsType,
+    OAuth2Credentials,
 )
 from backend.executor.manager import ExecutionManager
 from backend.integrations.creds_manager import IntegrationCredentialsManager
@@ -65,6 +65,7 @@ def login(
 
 class CredentialsMetaResponse(BaseModel):
     id: str
+    provider: str
     type: CredentialsType
     title: str | None
     scopes: list[str] | None
@@ -119,6 +120,7 @@ def callback(
     )
     return CredentialsMetaResponse(
         id=credentials.id,
+        provider=credentials.provider,
         type=credentials.type,
         title=credentials.title,
         scopes=credentials.scopes,
@@ -126,8 +128,26 @@ def callback(
     )
 
 
-@router.get("/{provider}/credentials")
+@router.get("/credentials")
 def list_credentials(
+    user_id: Annotated[str, Depends(get_user_id)],
+) -> list[CredentialsMetaResponse]:
+    credentials = creds_manager.store.get_all_creds(user_id)
+    return [
+        CredentialsMetaResponse(
+            id=cred.id,
+            provider=cred.provider,
+            type=cred.type,
+            title=cred.title,
+            scopes=cred.scopes if isinstance(cred, OAuth2Credentials) else None,
+            username=cred.username if isinstance(cred, OAuth2Credentials) else None,
+        )
+        for cred in credentials
+    ]
+
+
+@router.get("/{provider}/credentials")
+def list_credentials_by_provider(
     provider: Annotated[str, Path(title="The provider to list credentials for")],
     user_id: Annotated[str, Depends(get_user_id)],
 ) -> list[CredentialsMetaResponse]:
@@ -135,6 +155,7 @@ def list_credentials(
     return [
         CredentialsMetaResponse(
             id=cred.id,
+            provider=cred.provider,
             type=cred.type,
             title=cred.title,
             scopes=cred.scopes if isinstance(cred, OAuth2Credentials) else None,
@@ -279,18 +300,28 @@ async def webhook_ingress_generic(
         )
 
 
-@router.post("/{provider}/webhooks/{webhook_id}/ping")
+@router.post("/webhooks/{webhook_id}/ping")
 async def webhook_ping(
-    provider: Annotated[str, Path(title="Provider where the webhook was registered")],
     webhook_id: Annotated[str, Path(title="Our ID for the webhook")],
     user_id: Annotated[str, Depends(get_user_id)],  # require auth
 ):
-    webhook_manager = WEBHOOK_MANAGERS_BY_NAME[provider]()
     webhook = await get_webhook(webhook_id)
+    webhook_manager = WEBHOOK_MANAGERS_BY_NAME[webhook.provider]()
 
-    await webhook_manager.trigger_ping(webhook)
-    if not await listen_for_webhook_event(webhook_id, event_type="ping"):
-        raise HTTPException(status_code=500, detail="Webhook ping event not received")
+    credentials = (
+        creds_manager.get(user_id, webhook.credentials_id)
+        if webhook.credentials_id
+        else None
+    )
+    try:
+        await webhook_manager.trigger_ping(webhook, credentials)
+    except NotImplementedError:
+        return False
+
+    if not await wait_for_webhook_event(webhook_id, event_type="ping", timeout=10):
+        raise HTTPException(status_code=504, detail="Webhook ping timed out")
+
+    return True
 
 
 # --------------------------- UTILITIES ---------------------------- #

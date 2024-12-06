@@ -212,8 +212,12 @@ export default class BaseAutoGPTServerAPI {
     );
   }
 
-  listCredentials(provider: string): Promise<CredentialsMetaResponse[]> {
-    return this._get(`/integrations/${provider}/credentials`);
+  listCredentials(provider?: string): Promise<CredentialsMetaResponse[]> {
+    return this._get(
+      provider
+        ? `/integrations/${provider}/credentials`
+        : "/integrations/credentials",
+    );
   }
 
   getCredentials(
@@ -235,6 +239,15 @@ export default class BaseAutoGPTServerAPI {
       `/integrations/${provider}/credentials/${id}`,
       force ? { force: true } : undefined,
     );
+  }
+
+  /**
+   * @returns `true` if a ping event was received, `false` if provider doesn't support pinging but the webhook exists.
+   * @throws  `Error` if the webhook does not exist.
+   * @throws  `Error` if the attempt to ping timed out.
+   */
+  async pingWebhook(webhook_id: string): Promise<boolean> {
+    return this._request("POST", `/integrations/webhooks/${webhook_id}/ping`);
   }
 
   logMetric(metric: AnalyticsMetrics) {
