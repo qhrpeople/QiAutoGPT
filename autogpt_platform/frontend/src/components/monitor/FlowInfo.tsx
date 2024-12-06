@@ -29,6 +29,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { useIndexedDB } from "@/hooks/useIndexedDB";
 
 export const FlowInfo: React.FC<
   React.HTMLAttributes<HTMLDivElement> & {
@@ -39,6 +40,7 @@ export const FlowInfo: React.FC<
   }
 > = ({ flow, flowRuns, flowVersion, refresh, ...props }) => {
   const api = useMemo(() => new AutoGPTServerAPI(), []);
+  const { clearStore } = useIndexedDB(flow.id);
 
   const [flowVersions, setFlowVersions] = useState<Graph[] | null>(null);
   const [selectedVersion, setSelectedFlowVersion] = useState(
@@ -168,8 +170,9 @@ export const FlowInfo: React.FC<
             <Button
               variant="destructive"
               onClick={() => {
-                api.deleteGraph(flow.id).then(() => {
+                api.deleteGraph(flow.id).then(async () => {
                   setIsDeleteModalOpen(false);
+                  await clearStore();
                   refresh();
                 });
               }}

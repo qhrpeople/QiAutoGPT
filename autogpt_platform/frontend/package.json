@@ -55,6 +55,7 @@
     "cmdk": "1.0.4",
     "cookie": "1.0.2",
     "date-fns": "^4.1.0",
+    "dexie": "^4.0.10",
     "dotenv": "^16.4.5",
     "elliptic": "6.6.1",
     "launchdarkly-react-client-sdk": "^3.6.0",
