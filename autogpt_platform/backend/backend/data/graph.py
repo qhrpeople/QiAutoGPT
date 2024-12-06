@@ -84,6 +84,8 @@ class NodeModel(Node):
             raise ValueError(f"Block #{self.block_id} not found for node #{self.id}")
         if not block.webhook_config:
             raise TypeError("This method can't be used on non-webhook blocks")
+        if not block.webhook_config.event_filter_input:
+            return True
         event_filter = self.input_default.get(block.webhook_config.event_filter_input)
         if not event_filter:
             raise ValueError(f"Event filter is not configured on node #{self.id}")
@@ -265,11 +267,17 @@ class GraphModel(Graph):
                 + [sanitize(link.sink_name) for link in input_links.get(node.id, [])]
             )
             for name in block.input_schema.get_required_fields():
-                if name not in provided_inputs and (
-                    for_run  # Skip input completion validation, unless when executing.
-                    or block.block_type == BlockType.INPUT
-                    or block.block_type == BlockType.OUTPUT
-                    or block.block_type == BlockType.AGENT
+                if (
+                    name not in provided_inputs
+                    and not (
+                        name == "payload" and block.block_type == BlockType.WEBHOOK
+                    )
+                    and (
+                        for_run  # Skip input completion validation, unless when executing.
+                        or block.block_type == BlockType.INPUT
+                        or block.block_type == BlockType.OUTPUT
+                        or block.block_type == BlockType.AGENT
+                    )
                 ):
                     raise ValueError(
                         f"Node {block.name} #{node.id} required input missing: `{name}`"
