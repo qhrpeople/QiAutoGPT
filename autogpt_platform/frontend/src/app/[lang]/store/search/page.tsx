@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import AutoGPTServerAPIClient from "@/lib/autogpt-server-api/client";
+import AutoGPTServerAPIClient from "@/lib/autogpt-server-api";
 import { AgentsSection } from "@/components/agptui/composite/AgentsSection";
 import { SearchBar } from "@/components/agptui/SearchBar";
 import { FeaturedCreators } from "@/components/agptui/composite/FeaturedCreators";
